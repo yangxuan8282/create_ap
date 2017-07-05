@@ -629,6 +629,8 @@ NEW_MACADDR=
 DAEMONIZE=0
 NO_HAVEGED=0
 USE_PSK=0
+DNS1="129.29.29.29"
+DNS2="8.8.8.8"
 
 HOSTAPD_DEBUG_ARGS=
 REDIRECT_TO_LOCALHOST=0
@@ -719,6 +721,21 @@ _cleanup() {
             iptables -w -t nat -D POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
             iptables -w -D FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT
             iptables -w -D FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT
+            iptables -w -t nat -D SHADOWSOCKS -d $SS_SERVER_IP -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 0.0.0.0/8 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 10.0.0.0/8 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 127.0.0.0/8 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 169.254.0.0/16 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 172.16.0.0/12 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 192.168.0.0/16 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 224.0.0.0/4 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -d 240.0.0.0/4 -j RETURN || die
+            iptables -w -t nat -D SHADOWSOCKS -p tcp -j REDIRECT --to-ports 1080 || die
+            iptables -w -t nat -D SHADOWSOCKS -p udp -j REDIRECT --to-ports 1080 || die
+            iptables -w -t nat -D PREROUTING -p tcp -j SHADOWSOCKS || die
+            iptables -w -t nat -D PREROUTING -p udp -j SHADOWSOCKS || die
+            iptables -w -t nat -F SHADOWSOCKS || die
+            iptables -w -t nat -X SHADOWSOCKS || die
         elif [[ "$SHARE_METHOD" == "bridge" ]]; then
             if ! is_bridge_interface $INTERNET_IFACE; then
                 ip link set dev $BRIDGE_IFACE down
@@ -1681,6 +1698,8 @@ ${DNSMASQ_BIND}
 dhcp-range=${GATEWAY%.*}.1,${GATEWAY%.*}.254,255.255.255.0,24h
 dhcp-option-force=option:router,${GATEWAY}
 dhcp-option-force=option:dns-server,${DHCP_DNS}
+server=$DNS1
+server=$DNS2
 EOF
     MTU=$(get_mtu $INTERNET_IFACE)
     [[ -n "$MTU" ]] && echo "dhcp-option-force=option:mtu,${MTU}" >> $CONFDIR/dnsmasq.conf
@@ -1717,6 +1736,20 @@ if [[ "$SHARE_METHOD" != "none" ]]; then
         iptables -w -t nat -I POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
         iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
         iptables -w -I FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT || die
+        iptables -w -t nat -N SHADOWSOCKS || die
+        iptables -w -t nat -A SHADOWSOCKS -d $SS_SERVER_IP -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 0.0.0.0/8 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 10.0.0.0/8 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 127.0.0.0/8 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 169.254.0.0/16 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 172.16.0.0/12 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 192.168.0.0/16 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 224.0.0.0/4 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -d 240.0.0.0/4 -j RETURN || die
+        iptables -w -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 1080 || die
+        iptables -w -t nat -A SHADOWSOCKS -p udp -j REDIRECT --to-ports 1080 || die
+        iptables -w -t nat -I PREROUTING -p tcp -j SHADOWSOCKS || die
+        iptables -w -t nat -I PREROUTING -p udp -j SHADOWSOCKS || die
         echo 1 > /proc/sys/net/ipv4/conf/$INTERNET_IFACE/forwarding || die
         echo 1 > /proc/sys/net/ipv4/ip_forward || die
         # to enable clients to establish PPTP connections we must
